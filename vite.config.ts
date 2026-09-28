@@ -10,13 +10,4 @@ export default defineConfig({
     // or set JARVIS_ALLOWED_ORIGINS to match.
     port: Number(process.env.PORT) || 5173,
   },
-  optimizeDeps: {
-    // kokoro-js pulls in `phonemizer`, which carries espeak-ng as inline WASM.
-    // Vite's dependency pre-bundler rewrites that initialisation and the
-    // language table ends up empty — the symptom is
-    // `Invalid language identifier: "en". Should be one of: .` at generate()
-    // time, long after the model has loaded successfully. Serving these
-    // untouched fixes it.
-    exclude: ['kokoro-js', 'phonemizer', '@huggingface/transformers'],
-  },
 })

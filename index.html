@@ -39,11 +39,17 @@
       tight CSP, and sandboxed at the iframe — can be framed at all.
 
       The rest is loose on purpose, because the voice stack needs it:
-      'wasm-unsafe-eval' and 'unsafe-eval' for the ONNX runtime and the inline
-      espeak-ng WASM, blob: workers for the wake-word engine and the speech
-      model, ws: for both the bridge and Vite's HMR socket, https: for the
-      model download and the speech API, and 'unsafe-inline' scripts for the
-      React Fast Refresh preamble Vite injects in dev.
+      'wasm-unsafe-eval' and 'unsafe-eval' for the wake-word engine's WASM
+      (Porcupine) and hand tracking (MediaPipe), blob: workers for the same,
+      ws: for both the bridge and Vite's HMR socket, https: for search results
+      and other outbound calls, and 'unsafe-inline' scripts for the React Fast
+      Refresh preamble Vite injects in dev.
+
+      Kokoro (the local TTS server, kokoro-server/app.py, normally on
+      127.0.0.1:8880) is named explicitly in connect-src rather than folded
+      into the blanket https: rule, since it's a plain-http localhost origin
+      that rule doesn't cover. Keep this in step with VITE_KOKORO_URL/
+      KOKORO_PORT if you change the port.
     -->
     <meta
       http-equiv="Content-Security-Policy"
@@ -56,7 +62,7 @@
         script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src 'self' data: https://fonts.gstatic.com;
-        connect-src 'self' data: blob: https: ws: wss: http://localhost:8787 http://127.0.0.1:8787;
+        connect-src 'self' data: blob: https: ws: wss: http://localhost:8787 http://127.0.0.1:8787 http://localhost:8880 http://127.0.0.1:8880;
         worker-src 'self' blob:;
         media-src 'self' data: blob: http://localhost:8787 http://127.0.0.1:8787;
       "

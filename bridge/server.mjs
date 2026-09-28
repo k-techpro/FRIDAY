@@ -15,6 +15,7 @@
  *   node bridge/server.mjs
  */
 
+import './dotenv-local.mjs'
 import { WebSocketServer } from 'ws'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { displayServer } from './panels.mjs'
@@ -27,6 +28,7 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
+import { ensureKokoroServer, stopKokoroServer, KOKORO_URL } from './kokoro.mjs'
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
@@ -120,6 +122,14 @@ const MODEL = process.env.JARVIS_MODEL ?? 'claude-opus-5'
  * dead air shows.
  */
 const EFFORT = process.env.JARVIS_EFFORT ?? 'high'
+
+/**
+ * Which speech engine the browser should prefer. The bridge's only stake in
+ * this is whether to bring up the local Kokoro server — the browser makes its
+ * own engine choice (see src/config.ts's VITE_TTS_ENGINE) and talks to Kokoro
+ * directly over HTTP, never through this process.
+ */
+const TTS_PROVIDER = process.env.TTS_PROVIDER ?? 'kokoro'
 
 /**
  * Both spellings of every renamed built-in are listed on purpose. The SDK
@@ -1019,6 +1029,37 @@ void chromeAvailable().then((ok) => {
       ? `[jarvis] browser control ready${ALLOW_WRITES ? '' : ' (reading only — clicking and typing need JARVIS_ALLOW_WRITES=1)'}`
       : '[jarvis] browser control unavailable — open Chrome with the Claude extension enabled',
   )
+})
+
+/**
+ * Bring up the local Kokoro TTS server, if configured. Not awaited: the
+ * bridge's own socket must not wait on a cold model load (CUDA warm-up can
+ * take the better part of a minute), so this happens in the background while
+ * the bridge is already accepting connections. The browser separately polls
+ * KOKORO_URL/health itself before it starts routing speech there (see
+ * src/lib/kokoro.ts), so a slow or failed start here costs nothing but the
+ * premium voice — text and everything else keep working.
+ */
+if (TTS_PROVIDER === 'kokoro') {
+  void ensureKokoroServer().then((ok) => {
+    console.log(
+      ok
+        ? `[jarvis] speech: kokoro server ready at ${KOKORO_URL}`
+        : '[jarvis] speech: kokoro unavailable — the browser will fall back to its own voice',
+    )
+  })
+} else {
+  console.log(`[jarvis] TTS_PROVIDER=${TTS_PROVIDER} — not starting the local kokoro server`)
+}
+
+process.on('exit', stopKokoroServer)
+process.on('SIGINT', () => {
+  stopKokoroServer()
+  process.exit(0)
+})
+process.on('SIGTERM', () => {
+  stopKokoroServer()
+  process.exit(0)
 })
 
 console.log(

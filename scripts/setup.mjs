@@ -7,9 +7,10 @@
 // there, and the script always exits 0 — it is advice, not a gate.
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const tick = '  ok  ';
 const warn = ' note ';
@@ -101,6 +102,35 @@ if (elSource) {
 } else {
   line(info, 'No ElevenLabs key found — JARVIS will use browser speech (that is completely fine).');
   line(info, '  Optional: add ELEVENLABS_API_KEY for a better voice and Scribe transcription. The free tier is enough for a demo.');
+}
+
+// --- Kokoro local TTS server ----------------------------------------------
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const kokoroVenvPython = join(
+  projectRoot,
+  'kokoro-server',
+  '.venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+);
+if (existsSync(kokoroVenvPython)) {
+  line(tick, 'Kokoro TTS server is set up (kokoro-server/.venv found). The bridge starts it automatically.');
+} else {
+  line(info, 'Kokoro TTS server is not set up yet — voice will fall back to the browser\'s own speech.');
+  line(info, '  See kokoro-server/README.md to set it up (Python 3.11 + a venv, one-time).');
+}
+
+let espeakFound = false;
+try {
+  const res = spawnSync('espeak-ng', ['--version'], { encoding: 'utf8', timeout: 10000 });
+  espeakFound = res.status === 0;
+} catch {
+  // ignore — handled below
+}
+if (espeakFound) {
+  line(tick, 'eSpeak NG found — Kokoro\'s British-English phonemization will work.');
+} else if (existsSync(kokoroVenvPython)) {
+  line(warn, 'eSpeak NG not found on PATH. Kokoro needs it for British-English voices (bm_*).');
+  line(info, '  Install it: winget install eSpeak-NG.eSpeak-NG');
 }
 
 // --- How to run ----------------------------------------------------------

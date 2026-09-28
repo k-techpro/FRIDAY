@@ -244,10 +244,10 @@ function pickVoice(): SpeechSynthesisVoice | null {
  *  always naming a speechSynthesis voice that a cloud or neural engine has
  *  quietly replaced. */
 export function currentVoiceName(): string {
-  if (USE_ELEVENLABS || caps().tts) return 'ElevenLabs'
   if (TTS_ENGINE === 'kokoro' && !kokoro.isUnavailable()) {
     return KOKORO_VOICE.replace(/^bm_/, '')
   }
+  if (USE_ELEVENLABS || caps().tts) return 'ElevenLabs'
   return pickVoice()?.name ?? 'default'
 }
 
@@ -373,11 +373,17 @@ export function createSpeaker(): Speaker {
 
   /** null means "no audio pipeline, use the system voice directly". */
   function synthesise(text: string): Promise<string | null> | null {
-    // Prefer the ElevenLabs voice whenever the bridge reports it is available —
-    // for a demo the timbre is worth the round trip, and this is what makes the
-    // premium path automatic with no flag to set. It falls back to the browser
-    // voice on any failure, so a student without a key still hears him speak.
-    // `nativeBroken` latches on once the system voice has proved unusable.
+    // Kokoro (the local server) is the default voice — free, local, and fast
+    // now that generation runs on the GPU instead of per-sentence in the
+    // browser. Tried first whenever it's configured and hasn't already
+    // latched off for this session.
+    if (TTS_ENGINE === 'kokoro' && !kokoro.isUnavailable()) {
+      diag.engine = 'kokoro'
+      return kokoro.speak(text).catch(() => null)
+    }
+    // ElevenLabs next, whenever the bridge reports a key is configured, or the
+    // system voice has already proved unusable this session (`nativeBroken`
+    // latches that). It falls back to the browser voice on any failure.
     if (USE_ELEVENLABS || caps().tts || nativeBroken) {
       // Recorded at the moment the tier is chosen rather than only when the
       // native voice latches over. Without this the panel reported 'system'
@@ -386,10 +392,6 @@ export function createSpeaker(): Speaker {
       // exactly when you are trying to work out which engine is at fault.
       diag.engine = 'elevenlabs'
       return fetchCloudAudio(text).catch(() => null)
-    }
-    if (TTS_ENGINE === 'kokoro' && !kokoro.isUnavailable()) {
-      diag.engine = 'kokoro'
-      return kokoro.speak(text).catch(() => null)
     }
     diag.engine = 'system'
     return null
